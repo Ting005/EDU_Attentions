@@ -6,9 +6,11 @@ import json
 import pickle as pkl
 import torch
 from torch import optim
-from src.dataloaders.multiHAN import DatasetLoader
-from src.dataloaders.ASP_DICT import REST14_ASP_DICT as ASP_DICT
-from models.han_reg import HANREG
+# from src.dataloaders.multiHAN import DatasetLoader
+from src.EDUDataloader import DatasetLoader
+from src.ASP_DICT import REST14_ASP_DICT as ASP_DICT
+# from models.han_reg import HANREG
+from models.EDU_Attention import EDU_Attention
 import argparse
 import numpy as np
 import random
@@ -95,8 +97,8 @@ def store_attention_scores():
     hard_dataloader = DatasetLoader(batch_size=512, asp_dict=ASP_DICT, input_data=dataset['hard'])
     del dataset
 
-    model = HANREG(dim_word=300, dim_hidden=256, n_layer=1, glove=glove, asp_glove=glove_asp, embed_dropout=0.5,
-                   ASP_DICT=ASP_DICT, aspect_indexes=aspect_indexes)
+    model = EDU_Attention(dim_word=300, dim_hidden=256, n_layer=1, glove=glove, asp_glove=glove_asp, embed_dropout=0.5,
+                          ASP_DICT=ASP_DICT, aspect_indexes=aspect_indexes)
     model.to(compute_device)
     model = load_model(_model_name='han_reg_v2', _data_name='rest', _model=model)
     model.eval()
