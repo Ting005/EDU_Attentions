@@ -6,11 +6,9 @@ import json
 import pickle as pkl
 import torch
 from torch import optim
-# from src.dataloaders.multiHAN import DatasetLoader
-from src.EDUDataloader import DatasetLoader
-from src.ASP_DICT import REST14_ASP_DICT as ASP_DICT
-# from models.han_reg import HANREG
-from models.EDU_Attention import EDU_Attention
+from src.dataloaders.multiHAN import DatasetLoader
+from src.dataloaders.ASP_DICT import REST14_ASP_DICT as ASP_DICT
+from models.han_reg import HANREG
 import argparse
 import numpy as np
 import random
@@ -97,16 +95,16 @@ def store_attention_scores():
     hard_dataloader = DatasetLoader(batch_size=512, asp_dict=ASP_DICT, input_data=dataset['hard'])
     del dataset
 
-    model = EDU_Attention(dim_word=300, dim_hidden=256, n_layer=1, glove=glove, asp_glove=glove_asp, embed_dropout=0.5,
-                          ASP_DICT=ASP_DICT, aspect_indexes=aspect_indexes)
+    model = HANREG(dim_word=300, dim_hidden=256, n_layer=1, glove=glove, asp_glove=glove_asp, embed_dropout=0.5,
+                   ASP_DICT=ASP_DICT, aspect_indexes=aspect_indexes)
     model.to(compute_device)
     model = load_model(_model_name='han_reg_v2', _data_name='rest', _model=model)
     model.eval()
 
     test_avg_f1, test_f1s, test_acc, test_cfm, test_lst_all_inst = evaluation(compute_device, model, test_dataloader.Data)
     hard_avg_f1, hard_f1s, hard_acc, hard_cfm, hard_lst_all_inst = evaluation(compute_device, model, hard_dataloader.Data)
-
-    pickle.dump({'hard': hard_lst_all_inst, 'test': test_lst_all_inst}, open('../model_files/rest_han_reg.raw', 'wb'))
+    pdb.set_trace()
+    # pickle.dump({'hard': hard_lst_all_inst, 'test': test_lst_all_inst}, open('../model_files/rest_han_reg_v2.raw', 'wb'))
     print('score finished.')
 
 
@@ -150,6 +148,89 @@ def viz_attention():
         # pdb.set_trace()
 
 
+def attention_accuracy():
+    def __search_annotation(_data, _search_string):
+        found = False
+        max_len_seg_idx = np.argmax([len(s) for s in _search_string])
+        for _inst in _data:
+            if _search_string[max_len_seg_idx] in _inst['text']:
+                found = True
+                label_inst = _inst
+                break
+        assert found
+        segs = label_inst['segs']
+        segs_labels = label_inst['segs_labels']
+        return {'segs': segs, 'segs_labels': segs_labels}
+
+    rest_data = json.load(open('../exp_data/rest14_mul.json', 'r'))
+    rest_data_test, rest_data_hard = rest_data['test'],  rest_data['hard']
+    rest_han = pickle.load(open('../model_files/rest_han_reg_v2.raw', 'rb'))
+    hard = rest_han['hard']
+    test = rest_han['test']
+    cnt = 0
+    for idx, inst in enumerate(test):
+        segs = inst['text']
+        word_score = inst['word_score']
+        edu_score = inst['edu_score']
+        total_seg = inst['total_seg']
+        labels = inst['labels']
+        asp_true = inst['asp_true']
+        sem_true = inst['sem_true']
+        if len(segs) == 1 or sum(asp_true) == 1: continue
+        cnt += 1
+        '''
+        searching annotation
+        '''
+        anno = __search_annotation(rest_data_test, segs)
+
+        num_asp, num_seg, num_word = word_score.shape
+        _, num_seg = edu_score.shape
+
+        asp_true_idx = {a_i: [*ASP_DICT][a_i] for a_i, a_v in enumerate(asp_true) if a_v == 1.0}
+        print('=' * 50, cnt, '='*50)
+        print(anno)
+        print('|'.join(segs))
+        print(labels)
+        print('-' * 10)
+        for seg_idx, seg in enumerate(segs):
+            print(seg)
+            seg_terms = seg.split()
+            edu_word_scores = []
+            for a_idx, asp in asp_true_idx.items():
+                asp_edu_score = '{}({:.2f})'.format(asp, edu_score[a_idx, seg_idx] * 100)
+
+                asp_seg_word_scores = word_score[a_idx, seg_idx].tolist()
+                asp_seg_score_text = []
+                for t_idx, term in enumerate(seg_terms):
+                    asp_seg_score_text.append('{}({:.2f})'.format(term, asp_seg_word_scores[t_idx] * 100))
+
+                asp_seg_text = '{} --> {}'.format(asp_edu_score, ' '.join(asp_seg_score_text))
+                print(asp_seg_text)
+            print('-' * 20)
+    print(cnt)
+    pass
+
+
+def calculate_attention_scores():
+    scores = open('accuracy_attention', 'r').readlines()
+    # dict_result = {'SR': [], 'FD': [], 'AM': [], 'PR': [], 'MI': []}
+    lst_true, lst_pred = [], []
+    num_edu = 0
+    for line in scores:
+        if line.startswith('***'):
+            label, pred = line.replace('***', '').strip().split('-')
+            lst_true.append(label)
+            lst_pred.append(pred)
+            print(label, pred)
+            num_edu += 1
+    print(classification_report(y_true=lst_true, y_pred=lst_pred, digits=4))
+    print(accuracy_score(y_true=lst_true, y_pred=lst_pred))
+    print(f1_score(y_true=lst_true, y_pred=lst_pred, average='micro'))
+    print(num_edu)
+    pdb.set_trace()
+
 if __name__ == "__main__":
     store_attention_scores()
-    viz_attention()
+    # calculate_attention_scores()
+    # attention_accuracy()
+    # viz_attention()
