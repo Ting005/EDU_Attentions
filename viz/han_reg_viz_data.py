@@ -233,4 +233,4 @@ if __name__ == "__main__":
     store_attention_scores()
     # calculate_attention_scores()
     # attention_accuracy()
-    # viz_attention()
+    viz_attention()
